@@ -43,36 +43,25 @@ In Task 1 you ran `nanobot agent` from the VM terminal. For production, nanobot 
    From this point on, treat `nanobot/` inside the repository as the deployable copy of your agent project.
    When you change agent config or skills for the Docker deployment, edit the files in `nanobot/`.
 
-2. Your repo-local `nanobot/` directory needs a few more files for Docker deployment:
+2. Your repo-local `nanobot/` directory already contains two files for Docker deployment. Read them before proceeding:
 
-   - **`entrypoint.py`** — resolves environment variables (LLM API key, gateway host/port, backend URL) into the config at runtime, then launches `nanobot gateway`. This is needed because Docker passes config via env vars, not by editing files.
-
-     > **Hint:** Read `config.json`, inject env var values for provider API key/base URL, gateway host/port, and MCP server env vars (backend URL plus backend API key). Write a resolved config. Then `os.execvp("nanobot", ["nanobot", "gateway", "--config", resolved, "--workspace", workspace])`.
+   - **`entrypoint.py`** — resolves Docker environment variables into `config.json` at runtime, writes `config.resolved.json`, then launches `nanobot gateway`. It uses `pydantic_settings.BaseSettings` to read env vars and `nanobot.config.load_config()` to manipulate the typed config. It also wraps the gateway and every MCP server with `opentelemetry-instrument` for distributed tracing.
 
      A good mental model for `entrypoint.py` is:
 
      1. Read `config.json`
      2. Override only the fields that must come from Docker env vars
      3. Write `config.resolved.json`
-     4. `execvp(...)` into `nanobot gateway`
+     4. `execvp(...)` into `opentelemetry-instrument nanobot gateway`
 
-   - **`Dockerfile`** — multi-stage build with `uv` (same pattern as `backend/Dockerfile`). Final CMD: `python /app/nanobot/entrypoint.py`.
+   - **`Dockerfile`** — multi-stage build with `uv` (same pattern as `backend/Dockerfile`). Accepts `APP_UID`/`APP_GID` build args so the container user matches your host UID/GID. Final CMD: `python /app/nanobot/entrypoint.py`.
 
-     > **Hint:** Before writing `nanobot/Dockerfile`, inspect the existing
-     > Dockerfiles in this repository, especially [`backend/Dockerfile`](../../../backend/Dockerfile)
-     > and `qwen-code-api/Dockerfile`.
-     > Reuse the established patterns for:
-     > - multi-stage `uv` builds
-     > - copying workspace or package files in the right order
-     > - installing dependencies before the application package when helpful
-     > - switching to a non-root runtime user in the final image
-     > - keeping that runtime user consistent with the host UID/GID if you plan to bind-mount writable source directories during development
+   You do not need to edit either file. Your job is to make sure the rest of the stack (config, deps, compose, Caddy) lines up with what these files expect.
 
    By the end of Part A, you should have modified at least:
 
-   - `nanobot/entrypoint.py`
-   - `nanobot/Dockerfile`
-   - `docker-compose.yml`
+   - `nanobot/pyproject.toml` (uncommented dependencies)
+   - `docker-compose.yml` (uncommented nanobot service)
 
 3. Uncomment the scaffolded `nanobot` service block in `docker-compose.yml` and adapt it to your implementation:
 
