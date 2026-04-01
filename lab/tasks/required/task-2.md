@@ -47,6 +47,8 @@ In Task 1 you ran `nanobot agent` from the VM terminal. For production, nanobot 
 
    - **`entrypoint.py`** — resolves Docker environment variables into `config.json` at runtime, writes `config.resolved.json`, then launches `nanobot gateway`. It uses `pydantic_settings.BaseSettings` to read env vars and `nanobot.config.load_config()` to manipulate the typed config. It also wraps the gateway and every MCP server with `opentelemetry-instrument` for distributed tracing.
 
+     The entrypoint configures MCP servers for `lms` (Task 1) and `webchat` (Part B of this task). A third MCP server (`obs`) is commented out — you will enable it in Task 3.
+
      A good mental model for `entrypoint.py` is:
 
      1. Read `config.json`
