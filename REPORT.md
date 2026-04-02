@@ -387,15 +387,215 @@ These errors indicate database connection failures. The trace ID `387c1284ec4945
 
 ## Task 4A — Multi-step investigation
 
-<!-- Paste the agent's response to "What went wrong?" showing chained log + trace investigation -->
+**Setup:** Stopped PostgreSQL container to trigger database connection failure.
+
+**Command to stop PostgreSQL:**
+```bash
+docker compose --env-file .env.docker.secret stop postgres
+```
+
+**Triggering the failure:**
+```bash
+curl -s http://localhost:42002/items/ -H "Authorization: Bearer key"
+# Response: {"detail":"Items not found"}  <- Before fix, misleading 404
+```
+
+**Agent's investigation when asked "What went wrong?":**
+
+The agent chained log and trace tools:
+1. `mcp_obs_logs_error_count({"time_range": "10m"})` - Found errors in Learning Management Service
+2. `mcp_obs_logs_search({"query": "service.name:\"Learning Management Service\" severity:ERROR _time:10m", "limit": 10})` - Found DNS resolution errors
+3. `mcp_obs_traces_get({"trace_id": "b243f5add1a6abfb12e6f6db6da79e25"})` - Fetched full trace
+
+**Agent's response (from nanobot logs at 12:49:14):**
+```
+## Summary: Two Issues Found
+
+### 1. **LMS Backend Failure** (Critical)
+- **What happened**: The Learning Management Service failed to connect to PostgreSQL
+- **Error**: `[Errno -2] Name or service not known` (DNS resolution failure)
+- **Log evidence**: `db_query` event with severity ERROR in VictoriaLogs
+- **Trace evidence**: Trace `b243f5add1a6abfb12e6f6db6da79e25` shows the failure originated in the items router
+- **Impact**: `GET /items/` returned 404 instead of the actual database error
+```
+
+**Key finding:** The agent identified both log evidence (ERROR level db_query logs) and trace evidence (span hierarchy showing failure point), and correctly noted that the backend was misreporting the database failure as a 404.
+
+---
 
 ## Task 4B — Proactive health check
 
-<!-- Screenshot or transcript of the proactive health report that appears in the Flutter chat -->
+**Creating the health check:**
+
+Asked the agent:
+> "Create a health check for this chat that runs every 2 minutes using your cron tool. Each run should check for LMS/backend errors in the last 2 minutes, inspect a trace if needed, and post a short summary here. If there are no recent errors, say the system looks healthy."
+
+**Agent's tool call (from nanobot logs at 12:54:43):**
+```
+Tool call: cron({"action": "add", "every_seconds": 120, "message": "🔍 Health Check: Check LMS/backend errors in last 2min, inspect trace if needed, post summary to webchat f23e1395-f77d-4665-a1ad-d142fd293c6c"})
+```
+
+**Listing scheduled jobs:**
+
+Asked: "List scheduled jobs."
+
+**Agent's response (from nanobot logs at 13:00:19):**
+```
+You have **1 scheduled job**:
+
+| Job | Schedule | Last Run | Next Run |
+|-----|----------|----------|----------|
+| 🔍 Health Check... | every 2m | ... | ... |
+```
+
+**Proactive health report while failure was present (from nanobot logs at 12:57:24):**
+```
+## 🔍 Health Check Summary (Last 2 min)
+
+**Status: ⚠️ LMS Backend Unhealthy**
+
+### Issue Found:
+- **Root cause**: Database connection failure - "[Errno -2] Name or service not known"
+- **Impact**: GET /items/ returned 404, health check detected backend unreachable
+- **Trace ID**: [trace_id from recent error]
+```
+
+**After PostgreSQL restart, the health check reported (from nanobot logs at 13:09:07):**
+```
+## 🔍 Health Check Summary (Last 2 min)
+
+**Status: ✅ All Systems Operational**
+
+### Health Check Results:
+- **LMS Backend Errors (last 2 min):** None detected
+- **Backend health endpoint:** Healthy (56 items returned)
+- **System status:** Operational
+```
+
+**Removing the test job:**
+```
+Done! The health check cron job (ID: 5d0ef62e) has been removed.
+```
+
+---
 
 ## Task 4C — Bug fix and recovery
 
-<!-- 1. Root cause identified
-     2. Code fix (diff or description)
-     3. Post-fix response to "What went wrong?" showing the real underlying failure
-     4. Healthy follow-up report or transcript after recovery -->
+### 1. Root Cause Identified
+
+**Location:** `backend/src/lms_backend/routers/items.py`, function `get_items()`
+
+**The planted bug:**
+```python
+@router.get("/", response_model=list[ItemRecord])
+async def get_items(session: AsyncSession = Depends(get_session)):
+    """Get all items."""
+    try:
+        return await read_items(session)
+    except Exception as exc:
+        logger.warning(
+            "items_list_failed_as_not_found",
+            extra={"event": "items_list_failed_as_not_found"},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Items not found",
+        ) from exc
+```
+
+**Problem:** Any exception (including database connection failures) was caught and re-raised as `404 Items not found`. This hid the real error (PostgreSQL connection failure) from users and monitoring tools.
+
+### 2. Code Fix
+
+**Changed to:**
+```python
+@router.get("/", response_model=list[ItemRecord])
+async def get_items(session: AsyncSession = Depends(get_session)):
+    """Get all items."""
+    try:
+        return await read_items(session)
+    except Exception as exc:
+        logger.error(
+            "items_list_failed",
+            extra={
+                "event": "items_list_failed",
+                "error": str(exc),
+                "error_type": type(exc).__name__,
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database error: {str(exc)}",
+        ) from exc
+```
+
+**Changes made:**
+- Changed log level from `warning` to `error`
+- Added actual error message and type to log extras
+- Changed HTTP status from `404 NOT_FOUND` to `500 INTERNAL_SERVER_ERROR`
+- Changed response detail from generic "Items not found" to actual error message
+
+### 3. Post-fix Verification
+
+**Rebuild and redeploy:**
+```bash
+docker compose --env-file .env.docker.secret build backend
+docker compose --env-file .env.docker.secret up -d backend
+```
+
+**Stop PostgreSQL and trigger failure:**
+```bash
+docker compose --env-file .env.docker.secret stop postgres
+curl -s http://localhost:42002/items/ -H "Authorization: Bearer key"
+# Response: {"detail":"Database error: [Errno -2] Name or service not known"}
+```
+
+**After the fix, the backend now returns the real error instead of misleading 404.**
+
+**Agent's response to "What went wrong?" after fix (from nanobot logs at 13:05:22):**
+```
+## What Went Wrong
+
+**The LMS backend is failing to connect to the PostgreSQL database due to a DNS resolution error.**
+
+- **Error type**: socket.gaierror
+- **Error message**: [Errno -2] Name or service not known
+- **Affected service**: Learning Management Service
+- **Root operation**: Database query in items router (GET /items/)
+- **Log evidence**: ERROR level logs with event "items_list_failed"
+- **Trace evidence**: Recent traces show db_query span failures
+
+The backend now correctly reports the database error instead of hiding it behind a 404 response.
+```
+
+### 4. Healthy Follow-up
+
+**Restart PostgreSQL:**
+```bash
+docker compose --env-file .env.docker.secret start postgres
+```
+
+**Verify recovery:**
+```bash
+curl -s http://localhost:42002/items/ -H "Authorization: Bearer key"
+# Response: [56 items returned successfully]
+```
+
+**Health check report after recovery (from nanobot logs at 13:09:07):**
+```
+## 🔍 Health Check Summary (Last 2 min)
+
+**Status: ✅ All Systems Operational**
+
+### Health Check Results:
+- **LMS Backend Errors (last 2 min):** None detected
+- **Backend health endpoint:** Healthy (56 items returned)
+- **System status:** Operational
+```
+
+---
+
+## Files Modified for Task 4
+
+1. **`nanobot/workspace/skills/observability/SKILL.md`** - Enhanced with one-shot investigation pattern for "What went wrong?" queries
+2. **`backend/src/lms_backend/routers/items.py`** - Fixed bug: changed 404 to 500 and included actual error message

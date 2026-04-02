@@ -30,7 +30,15 @@
       "Bash(docker rmi *)",
       "Bash(python3 *)",
       "Bash(echo *)",
-      "Bash(head *)"
+      "Bash(head *)",
+      "Bash(source *)",
+      "Bash(message *)",
+      "Bash(30)",
+      "Bash(try:)",
+      "Bash(break)",
+      "Bash(except *)",
+      "Bash(eof)",
+      "Bash(20)"
     ]
   },
   "$version": 3
