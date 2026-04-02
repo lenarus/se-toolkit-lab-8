@@ -25,7 +25,10 @@
       "Bash(py)",
       "Bash(docker exec *)",
       "Bash(docker network *)",
-      "Bash(tr *)"
+      "Bash(tr *)",
+      "Bash(chmod *)",
+      "Bash(docker rmi *)",
+      "Bash(python3 *)"
     ]
   },
   "$version": 3
