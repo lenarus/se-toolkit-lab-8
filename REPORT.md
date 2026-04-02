@@ -6,13 +6,97 @@ Paste your checkpoint evidence below. Add screenshots as image files in the repo
 
 <!-- Paste the agent's response to "What is the agentic loop?" and "What labs are available in our LMS?" -->
 
+**Question 1: "What is the agentic loop?"**
+
+The agentic loop is the core reasoning cycle that autonomous AI agents use to accomplish tasks. It's a continuous feedback loop with these key phases:
+
+| Phase     | Description                                                        |
+|-----------|--------------------------------------------------------------------|
+| Perceive  | Take in information (user requests, tool outputs, environment state) |
+| Reason    | Analyze, plan, and decide on the next action                       |
+| Act       | Execute actions using available tools                              |
+| Observe   | Evaluate the results of those actions                              |
+| Iterate   | Repeat until the goal is reached or blocked                        |
+
+This loop enables agents to decompose complex problems, adapt dynamically based on feedback, self-correct, and use tools autonomously.
+
+**Question 2: "What labs are available in our LMS?"**
+
+The agent answered based on exploring local repo files (not live backend data):
+- Task 1: Set Up the Agent
+- Task 2: Deploy the Agent
+- Task 3: Observability
+- Task 4: Failure Diagnosis
+- Optional Task 1: Telegram Bot Client
+
+The agent noted it cannot query live LMS data yet — that requires MCP tools (Part B).
+
+---
+
 ## Task 1B — Agent with LMS tools
 
 <!-- Paste the agent's response to "What labs are available?" and "Describe the architecture of the LMS system" -->
 
+**Question 1: "What labs are available?"**
+
+The agent now returns **real lab names** from the LMS backend via MCP tools:
+
+1. Lab 01 – Products, Architecture & Roles
+2. Lab 02 — Run, Fix, and Deploy a Backend Service
+3. Lab 03 — Backend API: Explore, Debug, Implement, Deploy
+4. Lab 04 — Testing, Front-end, and AI Agents
+5. Lab 05 — Data Pipeline and Analytics Dashboard
+6. Lab 06 — Build Your Own Agent
+7. Lab 07 — Build a Client with an AI Coding Agent
+8. lab-08
+
+**Question 2: "Is the LMS backend healthy?"**
+
+The agent called the `mcp_lms_lms_health` tool and reported:
+- Status: healthy
+- Item count: 56
+- Errors: none
+
+**Complex question: "Which lab has the lowest pass rate?"**
+
+The agent chained multiple tool calls:
+1. First called `mcp_lms_lms_labs` to get all labs
+2. Then called `mcp_lms_lms_completion_rate` for each lab in parallel
+3. Analyzed results and identified: **Lab 02 and Lab 03 are tied at 89.1%** (lowest among labs with actual submissions)
+
+---
+
 ## Task 1C — Skill prompt
 
 <!-- Paste the agent's response to "Show me the scores" (without specifying a lab) -->
+
+**Question: "Show me the scores" (without specifying a lab)**
+
+With the LMS skill prompt, the agent now:
+1. First calls `lms_labs` to get available labs
+2. Lists all 8 labs and asks the user to choose:
+
+> There are 8 labs available. Which lab would you like to see the scores for?
+>
+> 1. Lab 01 – Products, Architecture & Roles
+> 2. Lab 02 — Run, Fix, and Deploy a Backend Service
+> 3. Lab 03 — Backend API: Explore, Debug, Implement, Deploy
+> 4. Lab 04 — Testing, Front-end, and AI Agents
+> 5. Lab 05 — Data Pipeline and Analytics Dashboard
+> 6. Lab 06 — Build Your Own Agent
+> 7. Lab 07 — Build a Client with an AI Coding Agent
+> 8. lab-08
+>
+> Please let me know which lab you'd like to see, or if you'd like to see scores for all labs.
+
+The skill file is at `nanobot/workspace/skills/lms/SKILL.md`. It teaches the agent:
+- Which `lms_*` tools are available and when to use each
+- To call `lms_labs` first when a lab parameter is needed but not provided
+- To use the `structured-ui` skill for presenting choices
+- To format numeric results nicely (percentages, counts)
+- To keep responses concise
+
+---
 
 ## Task 2A — Deployed agent
 
