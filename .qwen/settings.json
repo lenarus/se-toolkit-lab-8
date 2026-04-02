@@ -9,7 +9,23 @@
       "Bash(docker ps *)",
       "Bash(sleep *)",
       "Bash(uv *)",
-      "Bash(mkdir *)"
+      "Bash(mkdir *)",
+      "Bash(chown *)",
+      "Bash(git submodule *)",
+      "Bash(websocat *)",
+      "Bash(import *)",
+      "Bash(async *)",
+      "Bash(uri *)",
+      "Bash(as *)",
+      "Bash(await *)",
+      "Bash(json.dumps)",
+      "Bash(response *)",
+      "Bash(print)",
+      "Bash(asyncio.run)",
+      "Bash(py)",
+      "Bash(docker exec *)",
+      "Bash(docker network *)",
+      "Bash(tr *)"
     ]
   },
   "$version": 3
